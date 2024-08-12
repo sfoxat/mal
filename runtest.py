@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/data/data/com.termux/files/usr/bin/python
 
 from __future__ import print_function
 import os, sys, re
