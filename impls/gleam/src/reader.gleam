@@ -68,10 +68,7 @@ fn do_read_list(
 ) -> Result(#(List(MalType), Reader), Nil) {
   use token <- result.try(peek(reader))
   case token {
-    ")" -> {
-      use reader <- result.try(skip(reader))
-      Ok(#(acc, reader))
-    }
+    ")" -> skip(reader) |> result.map(pair.new(acc, _))
     _ -> {
       use #(form, reader) <- result.try(read_form(reader))
       do_read_list(reader, [form, ..acc])
