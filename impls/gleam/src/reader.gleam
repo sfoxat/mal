@@ -44,8 +44,9 @@ fn skip(reader: Reader) -> Result(Reader, Nil) {
   next(reader) |> result.map(with: pair.second)
 }
 
-pub fn read_str(input: String) {
+pub fn read_str(input: String) -> Result(MalType, Nil) {
   read_form(tokenize(input))
+  |> result.map(pair.first)
 }
 
 pub fn read_form(reader: Reader) -> Result(#(MalType, Reader), Nil) {

@@ -1,29 +1,35 @@
 import gleam/io
 import gleam/iterator
-import reader.{type Reader}
+import gleam/result
+import printer
+import reader
 import stdin.{stdin}
+import types.{type MalType}
 
 const prompt = "user> "
 
-pub fn read(str: String) -> String {
-  str
+pub fn read(str: String) -> Result(MalType, Nil) {
+  reader.read_str(str)
 }
 
-pub fn eval(ast: String, _env: String) -> String {
-  ast
+pub fn eval(ast: MalType, _env: String) -> Result(MalType, Nil) {
+  Ok(ast)
 }
 
-pub fn print(exp: String) -> String {
-  exp
+pub fn print(ast: MalType) -> String {
+  printer.pr_str(ast)
 }
 
 pub fn rep(str: String) -> String {
-  read(str) |> eval("") |> print
+  case result.then(read(str), eval(_, "")) {
+    Ok(ast) -> print(ast)
+    Error(Nil) -> "Error"
+  }
 }
 
 pub fn main() {
   io.print(prompt)
   use line <- iterator.each(stdin())
-  rep(line) |> io.print
+  rep(line) |> io.println
   io.print(prompt)
 }
