@@ -1,6 +1,7 @@
+import gleam/int
 import gleam/list
 import gleam/string
-import types.{type MalType, MalAtom, MalList}
+import types.{type MalType, MalAtom, MalList, MalNumber, MalSymbol}
 
 pub fn pr_str(exp: MalType) -> String {
   case exp {
@@ -11,5 +12,7 @@ pub fn pr_str(exp: MalType) -> String {
       |> string.join(" ")
       <> ")"
     }
+    MalSymbol(name) -> name
+    MalNumber(number) -> int.to_string(number)
   }
 }

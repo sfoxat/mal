@@ -1,10 +1,12 @@
+import gleam/int
 import gleam/io
-import gleam/list
+import gleam/list.{type ContinueOrStop, Continue, Stop}
 import gleam/option
 import gleam/pair
 import gleam/regex
 import gleam/result
-import types.{type MalType, MalAtom, MalList}
+import gleam/string
+import types.{type MalType, MalAtom, MalList, MalNumber}
 
 pub type Token =
   String
@@ -40,7 +42,7 @@ pub fn peek(reader: Reader) -> Result(Token, Nil) {
   }
 }
 
-fn skip(reader: Reader) -> Result(Reader, Nil) {
+pub fn skip(reader: Reader) -> Result(Reader, Nil) {
   next(reader) |> result.map(with: pair.second)
 }
 
@@ -75,6 +77,32 @@ fn do_read_list(
       do_read_list(reader, [form, ..acc])
     }
   }
+}
+
+pub fn parse_number(input: String) -> Result(MalType, ContinueOrStop(String)) {
+  let int_part = fn(input: String) -> Result(Int, ContinueOrStop(String)) {
+    use first <- result.try(
+      string.first(input)
+      |> result.map_error(fn(_) { Stop("error:reader:no input") }),
+    )
+    case first {
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ->
+        int.parse(input)
+        |> result.map_error(fn(_) { Stop("error:reader:not a number") })
+      _ -> Error(Continue(""))
+    }
+  }
+
+  use #(first, rest) <- result.try(
+    string.pop_grapheme(input)
+    |> result.map_error(fn(_) { Stop("error:reader:no input") }),
+  )
+  case first {
+    "-" -> int_part(rest) |> result.map(int.negate)
+    "+" -> int_part(rest)
+    _ -> int_part(input)
+  }
+  |> result.map(MalNumber)
 }
 
 pub fn read_atom(reader: Reader) -> Result(#(MalType, Reader), Nil) {
