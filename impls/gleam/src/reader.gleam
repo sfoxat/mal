@@ -6,7 +6,7 @@ import gleam/pair
 import gleam/regex
 import gleam/result
 import gleam/string
-import types.{type MalType, MalAtom, MalList, MalNumber}
+import types.{type MalType, MalList, MalNumber, MalSymbol}
 
 pub type Token =
   String
@@ -79,15 +79,42 @@ fn do_read_list(
   }
 }
 
-pub fn parse_number(input: String) -> Result(Option(MalType), String) {
-  let int_part = fn(input: String) -> Result(Option(Int), String) {
+pub fn read_atom(reader: Reader) -> Result(#(MalType, Reader), Nil) {
+  use #(token, reader) <- result.try(next(reader))
+  [parse_number, parse_symbol]
+  |> do_read_atom(token)
+  |> result.map(pair.new(_, reader))
+  |> result.nil_error
+}
+
+type AtomParser =
+  fn(Token) -> Result(Option(MalType), String)
+
+fn do_read_atom(
+  parsers: List(AtomParser),
+  token: Token,
+) -> Result(MalType, String) {
+  case parsers {
+    [] -> Error("error:reader:can't parse atom")
+    [parser, ..rest] -> {
+      case parser(token) {
+        Error(err) -> Error(err)
+        Ok(None) -> do_read_atom(rest, token)
+        Ok(Some(mal_type)) -> Ok(mal_type)
+      }
+    }
+  }
+}
+
+pub fn parse_number(token: Token) -> Result(Option(MalType), String) {
+  let int_part = fn(token: Token) -> Result(Option(Int), String) {
     use first <- result.try(
-      string.first(input)
+      string.first(token)
       |> result.map_error(fn(_) { "error:reader:no input" }),
     )
     case first {
       "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ->
-        int.parse(input)
+        int.parse(token)
         |> result.map(Some)
         |> result.map_error(fn(_) { "error:reader:not a number" })
       _ -> Ok(None)
@@ -95,20 +122,19 @@ pub fn parse_number(input: String) -> Result(Option(MalType), String) {
   }
 
   use #(first, rest) <- result.try(
-    string.pop_grapheme(input)
+    string.pop_grapheme(token)
     |> result.map_error(fn(_) { "error:reader:no input" }),
   )
   case first {
     "-" -> int_part(rest) |> result.map(option.map(_, int.negate))
     "+" -> int_part(rest)
-    _ -> int_part(input)
+    _ -> int_part(token)
   }
   |> result.map(option.map(_, MalNumber))
 }
 
-pub fn read_atom(reader: Reader) -> Result(#(MalType, Reader), Nil) {
-  use #(token, reader) <- result.try(next(reader))
-  Ok(#(MalAtom(token), reader))
+pub fn parse_symbol(token: Token) -> Result(Option(MalType), String) {
+  Ok(Some(MalSymbol(token)))
 }
 
 pub fn main() {
