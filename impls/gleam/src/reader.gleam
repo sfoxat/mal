@@ -107,30 +107,27 @@ fn do_read_atom(
 }
 
 pub fn parse_number(token: Token) -> Result(Option(MalType), String) {
-  let int_part = fn(token: Token) -> Result(Option(Int), String) {
-    use first <- result.try(
-      string.first(token)
-      |> result.map_error(fn(_) { "error:reader:no input" }),
-    )
-    case first {
-      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ->
-        int.parse(token)
-        |> result.map(Some)
-        |> result.map_error(fn(_) { "error:reader:not a number" })
-      _ -> Ok(None)
-    }
-  }
-
-  use #(first, rest) <- result.try(
-    string.pop_grapheme(token)
-    |> result.map_error(fn(_) { "error:reader:no input" }),
-  )
-  case first {
-    "-" -> int_part(rest) |> result.map(option.map(_, int.negate))
-    "+" -> int_part(rest)
-    _ -> int_part(token)
+  case string.pop_grapheme(token) {
+    Ok(#("-", rest)) ->
+      parse_int_part(rest) |> result.map(option.map(_, int.negate))
+    Ok(#("+", rest)) -> parse_int_part(rest)
+    _ -> parse_int_part(token)
   }
   |> result.map(option.map(_, MalNumber))
+}
+
+fn parse_int_part(token: Token) -> Result(Option(Int), String) {
+  case string.first(token) {
+    Ok(first) ->
+      case first {
+        "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ->
+          int.parse(token)
+          |> result.map(Some)
+          |> result.map_error(fn(_) { "error:reader:not a number" })
+        _ -> Ok(None)
+      }
+    Error(_) -> Ok(None)
+  }
 }
 
 pub fn parse_symbol(token: Token) -> Result(Option(MalType), String) {
