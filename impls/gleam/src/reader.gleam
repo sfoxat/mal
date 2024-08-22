@@ -6,7 +6,7 @@ import gleam/pair
 import gleam/regex
 import gleam/result
 import gleam/string
-import types.{type MalType, MalList, MalNumber, MalSymbol}
+import types.{type MalError, type MalType, MalList, MalNumber, MalSymbol}
 
 pub type Token =
   String
@@ -28,30 +28,30 @@ pub fn tokenize(input: String) -> Reader {
   Reader(tokens)
 }
 
-pub fn next(reader: Reader) -> Result(#(Token, Reader), Nil) {
+pub fn next(reader: Reader) -> Result(#(Token, Reader), MalError) {
   case reader.tokens {
-    [] -> Error(Nil)
+    [] -> Error(types.ErrEof)
     [first, ..rest] -> Ok(#(first, Reader(rest)))
   }
 }
 
-pub fn peek(reader: Reader) -> Result(Token, Nil) {
+pub fn peek(reader: Reader) -> Result(Token, MalError) {
   case reader.tokens {
-    [] -> Error(Nil)
+    [] -> Error(types.ErrEof)
     [first, ..] -> Ok(first)
   }
 }
 
-pub fn skip(reader: Reader) -> Result(Reader, Nil) {
+pub fn skip(reader: Reader) -> Result(Reader, MalError) {
   next(reader) |> result.map(with: pair.second)
 }
 
-pub fn read_str(input: String) -> Result(MalType, Nil) {
+pub fn read_str(input: String) -> Result(MalType, MalError) {
   read_form(tokenize(input))
   |> result.map(pair.first)
 }
 
-pub fn read_form(reader: Reader) -> Result(#(MalType, Reader), Nil) {
+pub fn read_form(reader: Reader) -> Result(#(MalType, Reader), MalError) {
   use token <- result.try(peek(reader))
   case token {
     "(" -> read_list(reader)
@@ -59,16 +59,19 @@ pub fn read_form(reader: Reader) -> Result(#(MalType, Reader), Nil) {
   }
 }
 
-pub fn read_list(reader: Reader) -> Result(#(MalType, Reader), Nil) {
+pub fn read_list(reader: Reader) -> Result(#(MalType, Reader), MalError) {
   use reader <- result.try(skip(reader))
-  use #(lst, reader) <- result.try(do_read_list(reader, []))
-  Ok(#(MalList(list.reverse(lst)), reader))
+  case do_read_list(reader, []) {
+    Ok(#(lst, reader)) -> Ok(#(MalList(list.reverse(lst)), reader))
+    Error(types.ErrEof) -> Error(types.ErrMsg("error:reader:unbalanced parens"))
+    Error(err) -> Error(err)
+  }
 }
 
 fn do_read_list(
   reader: Reader,
   acc: List(MalType),
-) -> Result(#(List(MalType), Reader), Nil) {
+) -> Result(#(List(MalType), Reader), MalError) {
   use token <- result.try(peek(reader))
   case token {
     ")" -> skip(reader) |> result.map(pair.new(acc, _))
@@ -79,23 +82,22 @@ fn do_read_list(
   }
 }
 
-pub fn read_atom(reader: Reader) -> Result(#(MalType, Reader), Nil) {
+pub fn read_atom(reader: Reader) -> Result(#(MalType, Reader), MalError) {
   use #(token, reader) <- result.try(next(reader))
-  [parse_number, parse_symbol]
+  [parse_comment, parse_number, parse_symbol]
   |> do_read_atom(token)
   |> result.map(pair.new(_, reader))
-  |> result.nil_error
 }
 
 type AtomParser =
-  fn(Token) -> Result(Option(MalType), String)
+  fn(Token) -> Result(Option(MalType), MalError)
 
 fn do_read_atom(
   parsers: List(AtomParser),
   token: Token,
-) -> Result(MalType, String) {
+) -> Result(MalType, MalError) {
   case parsers {
-    [] -> Error("error:reader:can't parse atom")
+    [] -> Error(types.ErrMsg("error:reader:can't parse atom"))
     [parser, ..rest] -> {
       case parser(token) {
         Error(err) -> Error(err)
@@ -106,7 +108,14 @@ fn do_read_atom(
   }
 }
 
-pub fn parse_number(token: Token) -> Result(Option(MalType), String) {
+pub fn parse_comment(token: Token) -> Result(Option(MalType), MalError) {
+  case string.first(token) {
+    Ok(";") -> Error(types.ErrEof)
+    _ -> Ok(None)
+  }
+}
+
+pub fn parse_number(token: Token) -> Result(Option(MalType), MalError) {
   case string.pop_grapheme(token) {
     Ok(#("-", rest)) ->
       parse_int_part(rest) |> result.map(option.map(_, int.negate))
@@ -116,21 +125,23 @@ pub fn parse_number(token: Token) -> Result(Option(MalType), String) {
   |> result.map(option.map(_, MalNumber))
 }
 
-fn parse_int_part(token: Token) -> Result(Option(Int), String) {
+fn parse_int_part(token: Token) -> Result(Option(Int), MalError) {
   case string.first(token) {
     Ok(first) ->
       case first {
         "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ->
           int.parse(token)
           |> result.map(Some)
-          |> result.map_error(fn(_) { "error:reader:not a number" })
+          |> result.map_error(fn(_) {
+            types.ErrMsg("error:reader:not a number")
+          })
         _ -> Ok(None)
       }
     Error(_) -> Ok(None)
   }
 }
 
-pub fn parse_symbol(token: Token) -> Result(Option(MalType), String) {
+pub fn parse_symbol(token: Token) -> Result(Option(MalType), MalError) {
   Ok(Some(MalSymbol(token)))
 }
 

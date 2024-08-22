@@ -3,3 +3,8 @@ pub type MalType {
   MalSymbol(String)
   MalNumber(Int)
 }
+
+pub type MalError {
+  ErrEof
+  ErrMsg(String)
+}
